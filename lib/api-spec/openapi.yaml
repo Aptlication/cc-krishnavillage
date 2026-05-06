@@ -1,0 +1,2273 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: guests
+    description: Guest device registration
+  - name: maintenance
+    description: Maintenance request management
+  - name: notifications
+    description: Push notifications
+  - name: staff
+    description: Staff authentication and account management
+  - name: expenses
+    description: Staff expense claims and reimbursements
+  - name: storage
+    description: Object storage upload and serving endpoints
+  - name: services
+    description: FAQ and yoga schedule content management
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /guests/register:
+    post:
+      operationId: registerGuest
+      tags: [guests]
+      summary: Register a guest device for push notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterGuestRequest"
+      responses:
+        "201":
+          description: Guest registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Guest"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guests/{id}:
+    delete:
+      operationId: deleteGuest
+      tags: [guests]
+      summary: Delete a guest profile
+      description: >
+        Permanently removes the guest record identified by id. The caller must
+        supply their push token in the request body; the server verifies it
+        matches the stored token for the given id, preventing one device from
+        deleting another guest's profile.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteGuestRequest"
+      responses:
+        "204":
+          description: Guest deleted successfully
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — push token does not match this guest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Guest not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateGuest
+      tags: [guests]
+      summary: Update a guest's name and room number
+      description: >
+        Updates the guest profile identified by id. The caller must supply their
+        push token in the request body; the server verifies it matches the stored
+        token for the given id, preventing one device from altering another guest's
+        details.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGuestRequest"
+      responses:
+        "200":
+          description: Guest updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Guest"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — push token does not match this guest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Guest not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guests/{id}/staff:
+    delete:
+      operationId: staffDeleteGuest
+      tags: [guests]
+      summary: Remove a guest from the list (staff only)
+      description: >
+        Permanently removes the guest record identified by id. Requires staff
+        authentication; no push token is needed.
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Guest removed successfully
+        "401":
+          description: Unauthorized — invalid staff token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Guest not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guests:
+    get:
+      operationId: getGuests
+      tags: [guests]
+      summary: List all registered guests (staff only)
+      parameters:
+        - name: roomNumber
+          in: query
+          required: false
+          schema:
+            type: string
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: List of registered guests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Guest"
+        "401":
+          description: Unauthorized — invalid staff token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /vapid-public-key:
+    get:
+      operationId: getVapidPublicKey
+      tags: [notifications]
+      summary: Get VAPID public key for web push subscription
+      responses:
+        "200":
+          description: VAPID public key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  publicKey:
+                    type: string
+                required:
+                  - publicKey
+        "503":
+          description: Web push not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /maintenance:
+    post:
+      operationId: createMaintenanceReport
+      tags: [maintenance]
+      summary: Submit a maintenance request (guest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaintenanceReportRequest"
+      responses:
+        "201":
+          description: Maintenance report created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    type: string
+                required:
+                  - id
+                  - status
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: getMaintenanceReports
+      tags: [maintenance]
+      summary: List maintenance reports (staff only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, in_progress, resolved]
+      responses:
+        "200":
+          description: List of maintenance reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MaintenanceReport"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /maintenance/staff:
+    post:
+      operationId: createStaffMaintenanceReport
+      tags: [maintenance]
+      summary: Create a maintenance report on behalf of staff (staff only)
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffMaintenanceReportRequest"
+      responses:
+        "201":
+          description: Maintenance report created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    type: string
+                required:
+                  - id
+                  - status
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /maintenance/{id}/acknowledge:
+    patch:
+      operationId: acknowledgeMaintenanceReport
+      tags: [maintenance]
+      summary: Acknowledge a maintenance report (staff only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcknowledgeMaintenanceReportRequest"
+      responses:
+        "200":
+          description: Report acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceReport"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Report is not in open status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /maintenance/{id}/resolve:
+    patch:
+      operationId: resolveMaintenanceReport
+      tags: [maintenance]
+      summary: Resolve a maintenance report (staff only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveMaintenanceReportRequest"
+      responses:
+        "200":
+          description: Report resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceReport"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notifications:
+    get:
+      operationId: getNotifications
+      tags: [notifications]
+      summary: Get notification history
+      parameters:
+        - name: roomNumber
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/send:
+    post:
+      operationId: sendNotification
+      tags: [notifications]
+      summary: Send a push notification to guests (staff only)
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendNotificationRequest"
+      responses:
+        "201":
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized — invalid staff token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notifications/staff-subscribe:
+    post:
+      operationId: registerStaffPushSubscription
+      tags: [notifications]
+      summary: Register staff browser push subscription (staff only)
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffPushSubscribeRequest"
+      responses:
+        "201":
+          description: Subscription registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: unregisterStaffPushSubscription
+      tags: [notifications]
+      summary: Unregister staff browser push subscription (staff only)
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffPushUnsubscribeRequest"
+      responses:
+        "200":
+          description: Subscription removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/login:
+    post:
+      operationId: staffLogin
+      tags: [staff]
+      summary: Log in with staff credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffLoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffSession"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/accounts:
+    get:
+      operationId: getStaffAccounts
+      tags: [staff]
+      summary: List all staff accounts (admin only)
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: List of staff accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffAccount"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createStaffAccount
+      tags: [staff]
+      summary: Create a new staff account (admin only)
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffAccountRequest"
+      responses:
+        "201":
+          description: Staff account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccount"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/sessions/revoke-all:
+    post:
+      operationId: revokeAllStaffSessions
+      tags: [staff]
+      summary: Revoke all active staff sessions (admin only)
+      description: >
+        Sets a server-side not-before timestamp so all tokens issued before
+        this moment are immediately rejected. Staff currently logged in will
+        be signed out on their next API request.
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: Sessions revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokeSessionsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/accounts/{id}/revoke-sessions:
+    post:
+      operationId: revokeStaffAccountSessions
+      tags: [staff]
+      summary: Revoke sessions for a single staff account (admin only)
+      description: >
+        Sets a per-account not-before timestamp so all tokens issued before
+        this moment for that specific account are immediately rejected.
+        Only the targeted staff member is signed out; other staff are unaffected.
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sessions revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokeSessionsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/security-events:
+    get:
+      operationId: getSecurityEvents
+      tags: [staff]
+      summary: List security audit log events (admin only)
+      description: >
+        Returns a paginated list of security events such as session revocations,
+        ordered most-recent first.
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: Security events returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SecurityEvent"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/accounts/{id}/deactivate:
+    patch:
+      operationId: deactivateStaffAccount
+      tags: [staff]
+      summary: Deactivate a staff account (admin only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Account deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccount"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/accounts/{id}/activate:
+    patch:
+      operationId: activateStaffAccount
+      tags: [staff]
+      summary: Reactivate a staff account (admin only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Account activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccount"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/me:
+    get:
+      operationId: getMyStaffProfile
+      tags: [staff]
+      summary: Get the current staff member's own profile (includes email)
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: Own profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccount"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/{id}/email:
+    patch:
+      operationId: updateStaffEmail
+      tags: [staff]
+      summary: Set or update a staff member's email address (canonical path)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStaffEmailRequest"
+      responses:
+        "200":
+          description: Email updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccount"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/accounts/{id}/email:
+    patch:
+      operationId: updateStaffEmailAlias
+      tags: [staff]
+      summary: Set or update a staff member's email address (alias)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStaffEmailRequest"
+      responses:
+        "200":
+          description: Email updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccount"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/badges:
+    get:
+      operationId: getExpenseBadges
+      tags: [expenses]
+      summary: Minimal badge data for linked expense claims (any tenant staff, no sensitive fields)
+      description: Returns only maintenanceReportId, amountAud, description, and project for the specified maintenance reports. No staffEmail or receiptUrls are included.
+      security:
+        - staffToken: []
+      parameters:
+        - name: maintenanceReportIds
+          in: query
+          required: true
+          description: Comma-separated list of maintenance report IDs to look up
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Badge data for matching reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExpenseBadge"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/upload:
+    post:
+      operationId: uploadExpenseReceipt
+      tags: [expenses]
+      summary: Upload a receipt image or PDF (multipart form-data); returns serving URL
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          description: File stored; serving URL returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseUploadResponse"
+        "400":
+          description: Invalid request or unsupported file type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Object storage not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/pending-count:
+    get:
+      operationId: getExpensePendingCount
+      tags: [expenses]
+      summary: Count of pending expense claims (admin only)
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: Pending count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                required:
+                  - count
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses:
+    get:
+      operationId: getExpenseClaims
+      tags: [expenses]
+      summary: List expense claims (staff sees own; admin sees all)
+      security:
+        - staffToken: []
+      parameters:
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, reimbursed, rejected]
+      responses:
+        "200":
+          description: List of expense claims
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExpenseClaim"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createExpenseClaim
+      tags: [expenses]
+      summary: Create a new expense claim
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseClaimRequest"
+      responses:
+        "201":
+          description: Expense claim created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseClaim"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/{id}:
+    patch:
+      operationId: updateExpenseClaim
+      tags: [expenses]
+      summary: Update an expense claim
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateExpenseClaimRequest"
+      responses:
+        "200":
+          description: Claim updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseClaim"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/{id}/withdraw:
+    patch:
+      operationId: withdrawExpenseClaim
+      tags: [expenses]
+      summary: Withdraw a claimed expense (owner only, before it is acknowledged)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Claim withdrawn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseClaim"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Claim is not in a withdrawable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/{id}/reimburse:
+    post:
+      operationId: reimburseExpenseClaim
+      tags: [expenses]
+      summary: Mark a claim as reimbursed and send confirmation email (admin only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReimburseExpenseClaimRequest"
+      responses:
+        "200":
+          description: Claim reimbursed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reimbursementId:
+                    type: integer
+                  claimId:
+                    type: integer
+                  reimbursedAt:
+                    type: string
+                  emailSent:
+                    type: boolean
+                required:
+                  - reimbursementId
+                  - claimId
+                  - reimbursedAt
+                  - emailSent
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already reimbursed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /expenses/{id}/reject:
+    post:
+      operationId: rejectExpenseClaim
+      tags: [expenses]
+      summary: Reject an expense claim (admin only)
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectExpenseClaimRequest"
+      responses:
+        "200":
+          description: Claim rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseClaim"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — admin only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Claim not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      summary: Request a presigned URL for file upload
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /staff/accounts/{id}/password:
+    patch:
+      operationId: changeStaffPassword
+      tags: [staff]
+      summary: Change a staff account's password
+      description: >
+        Staff can change their own password by supplying their current password
+        alongside the new one. Admins can reset any account's password without
+        providing the current password.
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed successfully
+        "400":
+          description: Invalid request or wrong current password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — cannot change another user's password without admin role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /services/faqs:
+    get:
+      operationId: getServiceFaqs
+      tags: [services]
+      summary: List FAQ items for the guest app
+      responses:
+        "200":
+          description: List of FAQ items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FaqItem"
+
+    post:
+      operationId: createServiceFaq
+      tags: [services]
+      summary: Create a new FAQ item
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFaqItemRequest"
+      responses:
+        "201":
+          description: FAQ item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FaqItem"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /services/faqs/reorder:
+    post:
+      operationId: reorderServiceFaqs
+      tags: [services]
+      summary: Reorder FAQ items
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderFaqsRequest"
+      responses:
+        "200":
+          description: Reorder successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /services/faqs/{id}:
+    patch:
+      operationId: updateServiceFaq
+      tags: [services]
+      summary: Update an FAQ item
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFaqItemRequest"
+      responses:
+        "200":
+          description: FAQ updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FaqItem"
+        "404":
+          description: FAQ not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: deleteServiceFaq
+      tags: [services]
+      summary: Delete an FAQ item
+      security:
+        - staffToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: FAQ not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /services/yoga-schedule:
+    get:
+      operationId: getYogaSchedule
+      tags: [services]
+      summary: Get the current yoga schedule image URL
+      responses:
+        "200":
+          description: Yoga schedule asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YogaScheduleAsset"
+
+    delete:
+      operationId: deleteYogaSchedule
+      tags: [services]
+      summary: Remove the current yoga schedule image
+      security:
+        - staffToken: []
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /services/contact-settings:
+    get:
+      operationId: getContactSettings
+      tags: [services]
+      summary: Get driver and buggy contact phone numbers
+      responses:
+        "200":
+          description: Contact settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactSettings"
+
+    put:
+      operationId: updateContactSettings
+      tags: [services]
+      summary: Update driver and/or buggy contact phone numbers
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateContactSettingsRequest"
+      responses:
+        "200":
+          description: Updated contact settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactSettings"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    staffToken:
+      type: http
+      scheme: bearer
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    UpdateGuestRequest:
+      type: object
+      properties:
+        pushToken:
+          type: string
+          description: "The guest's push token — proves ownership of this profile"
+        name:
+          type: string
+        roomNumber:
+          type: string
+      required:
+        - pushToken
+        - name
+        - roomNumber
+
+    DeleteGuestRequest:
+      type: object
+      properties:
+        pushToken:
+          type: string
+          description: "The guest's push token — proves ownership of this profile"
+      required:
+        - pushToken
+
+    RegisterGuestRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        roomNumber:
+          type: string
+        pushToken:
+          type: string
+        webPushSubscription:
+          type: string
+          description: "JSON-serialised Web Push subscription object for browser/PWA push delivery"
+      required:
+        - name
+        - roomNumber
+        - pushToken
+
+    Guest:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        roomNumber:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+          description: ISO timestamp of the last profile update; equals createdAt if never changed
+      required:
+        - id
+        - name
+        - roomNumber
+        - createdAt
+        - updatedAt
+
+    SendNotificationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+          enum: [room_ready, activity, checkout_reminder, general]
+        targetRoom:
+          type: string
+          description: "Room number to target, or 'all' for all guests"
+      required:
+        - title
+        - body
+        - type
+        - targetRoom
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+        targetRoom:
+          type: string
+        sentAt:
+          type: string
+        recipientCount:
+          type: integer
+        sentByName:
+          type: string
+          nullable: true
+      required:
+        - id
+        - title
+        - body
+        - type
+        - targetRoom
+        - sentAt
+        - recipientCount
+
+    StaffLoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    StaffSession:
+      type: object
+      properties:
+        token:
+          type: string
+        staffId:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+        role:
+          type: string
+          enum: [admin, housekeeper]
+      required:
+        - token
+        - staffId
+        - username
+        - displayName
+        - role
+
+    StaffAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+        role:
+          type: string
+          enum: [admin, housekeeper]
+        active:
+          type: boolean
+        email:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - username
+        - displayName
+        - role
+        - active
+        - createdAt
+
+    UpdateStaffEmailRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          nullable: true
+      required:
+        - email
+
+    ExpenseUploadResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: >
+            Publicly-accessible serving URL for the uploaded file.
+            Stored as a receipt URL in the expense claim's receiptUrls array.
+            Served via GET /api/storage/public-objects/... (no auth required).
+      required:
+        - url
+
+    ExpenseBadge:
+      type: object
+      description: Minimal expense data for badge display — no staffEmail or receiptUrls
+      required:
+        - maintenanceReportId
+        - amountAud
+        - description
+      properties:
+        maintenanceReportId:
+          type: integer
+        amountAud:
+          type: string
+        description:
+          type: string
+        project:
+          type: string
+          nullable: true
+
+    ExpenseClaim:
+      type: object
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: integer
+        staffId:
+          type: integer
+        staffDisplayName:
+          type: string
+        staffEmail:
+          type: string
+          nullable: true
+        maintenanceReportId:
+          type: integer
+          nullable: true
+        claimDate:
+          type: string
+        description:
+          type: string
+        project:
+          type: string
+          nullable: true
+        amountAud:
+          type: string
+        receiptUrls:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending, reimbursed, rejected]
+        rejectionNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        reimbursedByName:
+          type: string
+          nullable: true
+        reimbursedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - tenantId
+        - staffId
+        - staffDisplayName
+        - claimDate
+        - description
+        - amountAud
+        - receiptUrls
+        - status
+        - createdAt
+
+    CreateExpenseClaimRequest:
+      type: object
+      properties:
+        claimDate:
+          type: string
+        description:
+          type: string
+        project:
+          type: string
+          nullable: true
+        amountAud:
+          type: string
+        receiptUrls:
+          type: array
+          items:
+            type: string
+        maintenanceReportId:
+          type: integer
+          nullable: true
+        staffId:
+          type: integer
+          description: "Admin only: create claim on behalf of this staff member"
+          nullable: true
+      required:
+        - claimDate
+        - description
+        - amountAud
+
+    UpdateExpenseClaimRequest:
+      type: object
+      properties:
+        claimDate:
+          type: string
+        description:
+          type: string
+        project:
+          type: string
+          nullable: true
+        amountAud:
+          type: string
+        receiptUrls:
+          type: array
+          items:
+            type: string
+
+    ReimburseExpenseClaimRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+          nullable: true
+
+    RejectExpenseClaimRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          nullable: true
+
+    UploadUrlRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        contentType:
+          type: string
+      required:
+        - name
+        - size
+        - contentType
+
+    UploadUrlResponse:
+      type: object
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+      required:
+        - uploadURL
+        - objectPath
+
+    CreateStaffAccountRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        displayName:
+          type: string
+        role:
+          type: string
+          enum: [admin, housekeeper]
+      required:
+        - username
+        - password
+        - displayName
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          description: "Required when changing your own password; omit when an admin resets another account"
+        newPassword:
+          type: string
+      required:
+        - newPassword
+
+    MaintenanceReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+        guestName:
+          type: string
+        roomNumber:
+          type: string
+        openedByName:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        urgency:
+          type: string
+          enum: [urgent, non_urgent]
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+        inProgressAt:
+          type: string
+          nullable: true
+        inProgressByName:
+          type: string
+          nullable: true
+        inProgressNote:
+          type: string
+          nullable: true
+        resolution:
+          type: string
+          enum: [actioned, delegated]
+          nullable: true
+        resolvedByStaffId:
+          type: integer
+          nullable: true
+        resolvedByName:
+          type: string
+          nullable: true
+        resolutionNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        resolvedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - guestName
+        - roomNumber
+        - title
+        - description
+        - urgency
+        - status
+        - createdAt
+
+    CreateMaintenanceReportRequest:
+      type: object
+      properties:
+        guestName:
+          type: string
+        roomNumber:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        urgency:
+          type: string
+          enum: [urgent, non_urgent]
+      required:
+        - guestName
+        - roomNumber
+        - title
+        - description
+        - urgency
+
+    CreateStaffMaintenanceReportRequest:
+      type: object
+      properties:
+        roomNumber:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        urgency:
+          type: string
+          enum: [urgent, non_urgent]
+      required:
+        - roomNumber
+        - title
+        - description
+        - urgency
+
+    AcknowledgeMaintenanceReportRequest:
+      type: object
+      properties:
+        inProgressNote:
+          type: string
+
+    ResolveMaintenanceReportRequest:
+      type: object
+      properties:
+        resolution:
+          type: string
+          enum: [actioned, delegated]
+        resolutionNote:
+          type: string
+      required:
+        - resolution
+
+    RevokeSessionsResponse:
+      type: object
+      properties:
+        revokedBefore:
+          type: string
+          description: ISO timestamp — all tokens issued before this moment are now rejected
+      required:
+        - revokedBefore
+
+    SecurityEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: integer
+        eventType:
+          type: string
+          description: The type of security event (e.g. sessions_revoked, account_sessions_revoked)
+        triggeredByStaffId:
+          type: integer
+          nullable: true
+        triggeredByDisplayName:
+          type: string
+          nullable: true
+        targetStaffId:
+          type: integer
+          nullable: true
+        targetStaffDisplayName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          description: ISO timestamp of when the event occurred
+      required:
+        - id
+        - tenantId
+        - eventType
+        - triggeredByStaffId
+        - triggeredByDisplayName
+        - targetStaffId
+        - targetStaffDisplayName
+        - createdAt
+
+    StaffPushSubscribeRequest:
+      type: object
+      properties:
+        subscription:
+          type: object
+          description: Web Push subscription object (from PushManager.subscribe)
+          additionalProperties: true
+      required:
+        - subscription
+
+    StaffPushUnsubscribeRequest:
+      type: object
+      properties:
+        endpoint:
+          type: string
+          description: The endpoint URL of the subscription to remove
+      required:
+        - endpoint
+
+    FaqItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        sortOrder:
+          type: integer
+      required:
+        - id
+        - question
+        - answer
+        - sortOrder
+
+    CreateFaqItemRequest:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        sortOrder:
+          type: integer
+      required:
+        - question
+        - answer
+
+    UpdateFaqItemRequest:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        sortOrder:
+          type: integer
+
+    ReorderFaqsRequest:
+      type: object
+      properties:
+        order:
+          type: array
+          items:
+            type: integer
+          description: Ordered list of FAQ IDs
+      required:
+        - order
+
+    YogaScheduleAsset:
+      type: object
+      properties:
+        url:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          nullable: true
+      required:
+        - url
+
+    ContactSettings:
+      type: object
+      properties:
+        driverPhone:
+          type: string
+          nullable: true
+        buggyPhone:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          nullable: true
+      required:
+        - driverPhone
+        - buggyPhone
+
+    UpdateContactSettingsRequest:
+      type: object
+      properties:
+        driverPhone:
+          type: string
+        buggyPhone:
+          type: string
+
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+        - ok
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

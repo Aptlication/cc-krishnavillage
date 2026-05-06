@@ -1,0 +1,22 @@
+kind = "web"
+previewPath = "/admin/"
+title = "Staff Admin Dashboard"
+version = "1.0.0"
+id = "artifacts/admin"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+localPort = 8080
+paths = ["/admin/"]
+
+[services.development]
+run = "pnpm --filter @workspace/admin run serve-static"
+
+[services.production]
+build = "pnpm --filter @workspace/admin run build"
+run = "node artifacts/admin/server.mjs"
