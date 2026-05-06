@@ -484,6 +484,36 @@ export default function ServicesScreen() {
           </Pressable>
         </View>
 
+        {/* Housekeeping */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.cardHeader}>
+            {Platform.OS === "web" ? (
+              <Text style={styles.cardHeaderEmoji}>🧹</Text>
+            ) : (
+              <View style={[styles.cardIconWrap, { backgroundColor: colors.success + "18" }]}>
+                <Feather name="wind" size={20} color={colors.success} />
+              </View>
+            )}
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>Housekeeping</Text>
+          </View>
+          <Text style={[styles.cardBody, { color: colors.mutedForeground }]}>
+            Need fresh towels, linen, or room cleaning? Please enquire at Reception and a member of our team will assist you.
+          </Text>
+          <View style={[styles.infoBanner, { backgroundColor: colors.warning + "18", borderColor: colors.warning + "40" }]}>
+            <Feather name="info" size={14} color={colors.warning} />
+            <Text style={[styles.infoBannerText, { color: colors.warning }]}>
+              All additional housekeeping requests attract an additional fee. Contact Reception for further details.
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => Linking.openURL(`tel:${buggyPhone}`).catch(() => {})}
+            style={[styles.actionBtn, { backgroundColor: colors.primary }]}
+          >
+            <Feather name="phone" size={16} color={colors.primaryForeground} />
+            <Text style={[styles.actionBtnText, { color: colors.primaryForeground }]}>Enquire at Reception</Text>
+          </Pressable>
+        </View>
+
         {/* Golf Buggy Hire */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
