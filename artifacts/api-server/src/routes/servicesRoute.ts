@@ -7,8 +7,10 @@ import { faqItemsTable, serviceAssetsTable } from "@workspace/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { requireStaffAuth, requireAdminRole, resolveTenant } from "../middlewares/staffAuth";
 import type { StaffRequest, TenantRequest } from "../middlewares/staffAuth";
-import { objectStorageClient } from "../lib/objectStorage";
+import { objectStorageClient, ObjectStorageService } from "../lib/objectStorage";
 import { logger } from "../lib/logger";
+
+const objectStorageService = new ObjectStorageService();
 
 const servicesRouter = Router();
 
@@ -207,35 +209,16 @@ servicesRouter.post(
 
     const tenantId = (req as unknown as TenantRequest).tenantId;
 
-    const publicSearchPaths = process.env["PUBLIC_OBJECT_SEARCH_PATHS"] ?? "";
-    const firstPublicPath = publicSearchPaths.split(",")[0]?.trim() ?? "";
-    if (!firstPublicPath) {
-      res.status(503).json({ error: "Object storage not configured — PUBLIC_OBJECT_SEARCH_PATHS must be set" });
+    if (!objectStorageClient) {
+      res.status(503).json({ error: "File storage is not available — configure R2 credentials." });
       return;
     }
 
     const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
     const key = `yoga-schedule/${randomUUID()}${ext}`;
 
-    if (!objectStorageClient) {
-      res.status(503).json({ error: "File storage is not available in this environment." });
-      return;
-    }
-
     try {
-      const normalized = firstPublicPath.startsWith("/") ? firstPublicPath.slice(1) : firstPublicPath;
-      const firstSlash = normalized.indexOf("/");
-      const bucketName = firstSlash > 0 ? normalized.slice(0, firstSlash) : normalized;
-      const gcsPrefix = firstSlash > 0 ? normalized.slice(firstSlash + 1) : "";
-      const gcsObjectName = gcsPrefix ? `${gcsPrefix}/${key}` : key;
-
-      const bucket = objectStorageClient.bucket(bucketName);
-      await bucket.file(gcsObjectName).save(file.buffer, {
-        contentType: file.mimetype,
-        resumable: false,
-      });
-
-      const url = `/api/storage/public-objects/${key}`;
+      const url = await objectStorageService.uploadFile(key, file.buffer, file.mimetype);
 
       await db
         .insert(serviceAssetsTable)

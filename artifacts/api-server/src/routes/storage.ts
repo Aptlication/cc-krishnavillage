@@ -11,9 +11,13 @@ const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
 function storageUnavailable(res: Response) {
-  res.status(503).json({ error: "File storage is not available in this environment." });
+  res.status(503).json({ error: "File storage is not available — configure R2 credentials." });
 }
 
+/**
+ * POST /storage/uploads/request-url
+ * Returns a presigned PUT URL for direct client-to-R2 upload.
+ */
 router.post("/storage/uploads/request-url", requireStaffAuth, async (req: Request, res: Response) => {
   if (!objectStorageClient) { storageUnavailable(res); return; }
 
@@ -40,21 +44,20 @@ router.post("/storage/uploads/request-url", requireStaffAuth, async (req: Reques
   }
 });
 
+/**
+ * GET /storage/public-objects/*
+ * Proxy-serve files from R2 when a public CDN URL is not configured.
+ */
 router.get("/storage/public-objects/*filePath", async (req: Request, res: Response) => {
   if (!objectStorageClient) { storageUnavailable(res); return; }
 
   try {
     const raw = req.params.filePath;
-    const filePath = Array.isArray(raw) ? raw.join("/") : raw;
-    const file = await objectStorageService.searchPublicObject(filePath);
-    if (!file) {
-      res.status(404).json({ error: "File not found" });
-      return;
-    }
+    const key = Array.isArray(raw) ? raw.join("/") : raw;
+    const response = await objectStorageService.downloadObject(key);
 
-    const response = await objectStorageService.downloadObject(file);
     res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
+    response.headers.forEach((value, header) => res.setHeader(header, value));
 
     if (response.body) {
       const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
@@ -63,8 +66,12 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
       res.end();
     }
   } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
     req.log.error({ err: error }, "Error serving public object");
-    res.status(500).json({ error: "Failed to serve public object" });
+    res.status(500).json({ error: "Failed to serve file" });
   }
 });
 

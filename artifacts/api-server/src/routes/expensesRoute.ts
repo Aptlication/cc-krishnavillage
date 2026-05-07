@@ -13,9 +13,11 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { requireStaffAuth, requireAdminRole } from "../middlewares/staffAuth";
 import type { StaffRequest, TenantRequest } from "../middlewares/staffAuth";
-import { objectStorageClient } from "../lib/objectStorage";
+import { objectStorageClient, ObjectStorageService } from "../lib/objectStorage";
 import { sendNewExpenseClaimEmail, sendReimbursementEmail } from "../lib/email";
 import { logger } from "../lib/logger";
+
+const objectStorageService = new ObjectStorageService();
 
 const expensesRouter = Router();
 
@@ -109,47 +111,19 @@ expensesRouter.post(
       return;
     }
 
-    // Derive bucket and prefix entirely from PUBLIC_OBJECT_SEARCH_PATHS
-    // (format: "/<bucketName>/<prefix>", comma-separated — use first entry).
-    // Do NOT rely on DEFAULT_OBJECT_STORAGE_BUCKET_ID; the public search path
-    // already encodes both the bucket and the object prefix.
-    const publicSearchPaths = process.env["PUBLIC_OBJECT_SEARCH_PATHS"] ?? "";
-    const firstPublicPath = publicSearchPaths.split(",")[0]?.trim() ?? "";
-    if (!firstPublicPath) {
-      res.status(503).json({ error: "Object storage not configured — PUBLIC_OBJECT_SEARCH_PATHS must be set" });
+    if (!objectStorageClient) {
+      res.status(503).json({ error: "File storage is not available — configure R2 credentials." });
       return;
     }
 
     const ext = path.extname(file.originalname).toLowerCase() || ".bin";
     const key = `receipts/${randomUUID()}${ext}`;
 
-    if (!objectStorageClient) {
-      res.status(503).json({ error: "File storage is not available in this environment." });
-      return;
-    }
-
     try {
-      // Parse the public search path into bucket + prefix
-      // e.g. "/replit-objstore-xxx/public" → bucketName="replit-objstore-xxx", prefix="public"
-      const normalized = firstPublicPath.startsWith("/") ? firstPublicPath.slice(1) : firstPublicPath;
-      const firstSlash = normalized.indexOf("/");
-      const bucketName = firstSlash > 0 ? normalized.slice(0, firstSlash) : normalized;
-      const gcsPrefix = firstSlash > 0 ? normalized.slice(firstSlash + 1) : "";
-      const gcsObjectName = gcsPrefix ? `${gcsPrefix}/${key}` : key; // e.g. "public/receipts/uuid.jpg"
-
-      const bucket = objectStorageClient.bucket(bucketName);
-      await bucket.file(gcsObjectName).save(file.buffer, {
-        contentType: file.mimetype,
-        resumable: false,
-      });
-
-      // Serving: GET /api/storage/public-objects/<key> (no auth required)
-      // searchPublicObject("receipts/uuid.jpg") → searches "<firstPublicPath>/receipts/uuid.jpg"
-      // = "/replit-objstore-xxx/public/receipts/uuid.jpg" → bucket.file("public/receipts/uuid.jpg") ✓
-      const url = `/api/storage/public-objects/${key}`;
+      const url = await objectStorageService.uploadFile(key, file.buffer, file.mimetype);
       res.json({ url });
     } catch (err) {
-      logger.error({ err }, "Failed to upload receipt to App Storage");
+      logger.error({ err }, "Failed to upload receipt to R2");
       res.status(500).json({ error: "Failed to store file" });
     }
   }
