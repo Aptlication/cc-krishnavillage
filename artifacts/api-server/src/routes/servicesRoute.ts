@@ -217,6 +217,11 @@ servicesRouter.post(
     const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
     const key = `yoga-schedule/${randomUUID()}${ext}`;
 
+    if (!objectStorageClient) {
+      res.status(503).json({ error: "File storage is not available in this environment." });
+      return;
+    }
+
     try {
       const normalized = firstPublicPath.startsWith("/") ? firstPublicPath.slice(1) : firstPublicPath;
       const firstSlash = normalized.indexOf("/");

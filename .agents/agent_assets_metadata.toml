@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "hGdx5URXRZT_48-QCYZet"
@@ -12,3 +11,9 @@ id = "IWBO1oEw1DBrR6dn4lX6k"
 uri = "file://artifacts/mobile/assets/images/splash.png"
 type = "image"
 title = "krishna village splash screen"
+
+[[outputs]]
+id = "yiUzbMYuAe-f5YIXiNYmz"
+uri = "file://krishnavillage-replit.dump.gz"
+type = "unspecified"
+title = "Krishna Village — Replit PostgreSQL dump (v1.0.0)"

@@ -123,6 +123,11 @@ expensesRouter.post(
     const ext = path.extname(file.originalname).toLowerCase() || ".bin";
     const key = `receipts/${randomUUID()}${ext}`;
 
+    if (!objectStorageClient) {
+      res.status(503).json({ error: "File storage is not available in this environment." });
+      return;
+    }
+
     try {
       // Parse the public search path into bucket + prefix
       // e.g. "/replit-objstore-xxx/public" → bucketName="replit-objstore-xxx", prefix="public"

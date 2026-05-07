@@ -1,8 +1,14 @@
-# Workspace
+# Krishna Village Guest Notifier App
 
-## Overview
+A mobile PWA + Staff Admin Dashboard + API for guests at Krishna Village (525 Tyalgum Rd, Eungella NSW) to receive push notifications and access services during their stay.
 
-pnpm workspace monorepo using TypeScript. Hosts the Krishna Village Guest Notification App — a mobile PWA for guests at Krishna Village (525 Tyalgum Rd, Eungella NSW) to receive push notifications about their stay from housekeeping staff.
+## GitHub / Versioning
+
+- **GitHub repo**: `https://github.com/Aptlication/krishnavillage` (private, org: `Aptlication`)
+- **Current release**: `v1.0.0` — pushed May 2026
+- **Workflow**: Develop + deploy on **Replit**; push stable snapshots to **GitHub `main`** as the staging/release branch
+- **Pushing to GitHub**: Uses the GitHub Trees + Commits API (not git CLI — main agent is restricted from git push). Run the API push script when a new snapshot is needed. Token stored as `GITHUB_TOKEN` env var.
+- **Production URL**: `app.krishnavillage.com.au`
 
 ## Stack
 
