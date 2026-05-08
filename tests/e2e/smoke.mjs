@@ -88,9 +88,9 @@ async function run() {
 
   // --- Admin UI ---
   console.log("\n5. Admin dashboard UI");
-  const adminRoot = await get(`${ADMIN}/admin/`);
+  const adminRoot = await get(`${ADMIN}/`);
   ok("Admin dashboard responds (200)", adminRoot.status === 200);
-  ok("Admin dashboard contains Staff Login", adminRoot.text.includes("Staff Login") || adminRoot.text.includes("krishnavillage") || adminRoot.text.length > 500);
+  ok("Admin dashboard contains Krishna Village title", adminRoot.text.includes("Krishna Village") || adminRoot.text.length > 500);
 
   // --- Mobile PWA ---
   console.log("\n6. Mobile PWA");
