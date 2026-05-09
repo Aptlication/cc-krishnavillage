@@ -1,0 +1,27 @@
+FROM node:22-bookworm-slim
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@10
+
+# Copy workspace config
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy shared libs mobile depends on
+COPY lib/ ./lib/
+
+# Copy mobile source
+COPY artifacts/mobile/ ./artifacts/mobile/
+
+# Install all workspace dependencies
+RUN pnpm install --frozen-lockfile
+
+# EXPO_PUBLIC_DOMAIN must be set as a Railway Variable — it is embedded at build time
+ARG EXPO_PUBLIC_DOMAIN
+ENV EXPO_PUBLIC_DOMAIN=${EXPO_PUBLIC_DOMAIN}
+
+# Build the Expo web export
+RUN pnpm --filter @workspace/mobile run build
+
+# Serve static files (proxies /api/* to API_URL)
+CMD node artifacts/mobile/server/serve-web.js
