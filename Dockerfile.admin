@@ -7,6 +7,9 @@ RUN npm install -g pnpm@10
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
+# Root tsconfig that artifacts extend
+COPY tsconfig.base.json tsconfig.json ./
+
 # Copy shared libs admin depends on
 COPY lib/ ./lib/
 
