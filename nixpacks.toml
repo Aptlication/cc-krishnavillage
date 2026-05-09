@@ -5,4 +5,4 @@ cmds = ["npm install -g pnpm@10 && pnpm install --frozen-lockfile"]
 cmds = ["pnpm --filter @workspace/api-server run build"]
 
 [start]
-cmd = "node --enable-source-maps artifacts/api-server/dist/index.mjs"
+cmd = "pnpm --filter @workspace/db run push-force && node --enable-source-maps artifacts/api-server/dist/index.mjs"
