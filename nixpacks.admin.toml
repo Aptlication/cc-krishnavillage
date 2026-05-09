@@ -1,0 +1,8 @@
+[phases.install]
+cmds = ["npm install -g pnpm@10 && pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm --filter @workspace/admin run build"]
+
+[start]
+cmd = "node artifacts/admin/server.mjs"
