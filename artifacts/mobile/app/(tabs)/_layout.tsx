@@ -126,11 +126,6 @@ function ClassicTabLayout() {
             ),
         }}
       />
-      {/* Admin screen kept as a route but hidden from the guest tab bar */}
-      <Tabs.Screen
-        name="admin"
-        options={{ href: null }}
-      />
     </Tabs>
   );
 }
