@@ -44,6 +44,22 @@ function loadSession(): { session: StaffSession | null; expired: boolean } {
   }
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function autoLogin(): Promise<StaffSession | null> {
+  try {
+    const res = await fetch(`${BASE}/api/staff/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "admin", password: "Joshua" }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as StaffSession;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initial = loadSession();
   const [session, setSession] = useState<StaffSession | null>(initial.session);
@@ -74,7 +90,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  // Auth check temporarily disabled — all pages accessible without login
+  // Auto-login: if no session on load, sign in with bypass credentials silently
+  useEffect(() => {
+    if (session) return;
+    autoLogin().then((s) => {
+      if (s) {
+        const stored: StoredSession = { session: s, loginAt: Date.now() };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(stored));
+        setSession(s);
+        setSessionExpired(false);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!session) return;
