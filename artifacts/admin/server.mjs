@@ -8,9 +8,14 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT ?? 23744);
 const distDir = resolve(__dirname, "dist/public");
 
-const API_URL = process.env.API_URL
-  ? process.env.API_URL.replace(/\/$/, "")
-  : null;
+// Defensively strip "KEY=value" format in case the env var was set incorrectly
+// e.g. value is "API_URL=https://..." instead of just "https://..."
+function parseEnvUrl(raw) {
+  if (!raw) return null;
+  const val = raw.includes("=http") ? raw.slice(raw.indexOf("=") + 1) : raw;
+  return val.replace(/\/$/, "") || null;
+}
+const API_URL = parseEnvUrl(process.env.API_URL);
 const apiPort = Number(process.env.API_PORT ?? 8083);
 const apiHost = process.env.API_HOST ?? "localhost";
 
