@@ -38,10 +38,46 @@ async function fetchBypassToken() {
   const bypassSecret = process.env.ADMIN_BYPASS_SECRET;
   const initPassword = process.env.INITIAL_ADMIN_PASSWORD;
   const password = bypassSecret || initPassword;
-  if (!password) return false;
+  if (!password) {
+    console.warn("Admin bypass: neither ADMIN_BYPASS_SECRET nor INITIAL_ADMIN_PASSWORD is set — cannot auto-login");
+    return false;
+  }
 
+  const body = JSON.stringify({ username: "admin", password });
+
+  // If API_URL is set (separate Railway service), call it via HTTPS.
+  // Otherwise fall back to localhost (same-container / local dev).
+  if (API_URL) {
+    return new Promise((resolve) => {
+      const target = new URL("/api/staff/login", API_URL);
+      const isHttps = target.protocol === "https:";
+      const requester = isHttps ? httpsRequest : httpRequest;
+      const req = requester(
+        { hostname: target.hostname, port: target.port || (isHttps ? 443 : 80),
+          path: "/api/staff/login", method: "POST",
+          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+        (res) => {
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            if (res.statusCode === 200) {
+              try {
+                const json = JSON.parse(data);
+                if (json.token) { bypassToken = json.token; console.log("Admin bypass token acquired"); resolve(true); return; }
+              } catch {}
+            }
+            resolve(false);
+          });
+        }
+      );
+      req.on("error", () => resolve(false));
+      req.write(body);
+      req.end();
+    });
+  }
+
+  // Local / same-container: call via localhost
   return new Promise((resolve) => {
-    const body = JSON.stringify({ username: "admin", password });
     const req = httpRequest(
       { hostname: apiHost, port: apiPort, path: "/api/staff/login", method: "POST",
         headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
@@ -52,12 +88,7 @@ async function fetchBypassToken() {
           if (res.statusCode === 200) {
             try {
               const json = JSON.parse(data);
-              if (json.token) {
-                bypassToken = json.token;
-                console.log("Admin bypass token acquired");
-                resolve(true);
-                return;
-              }
+              if (json.token) { bypassToken = json.token; console.log("Admin bypass token acquired"); resolve(true); return; }
             } catch {}
           }
           resolve(false);
