@@ -16,13 +16,20 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-ensureDefaultAdmin().then(() => {
-  app.listen(port, (err) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
+const isProduction = process.env["NODE_ENV"] === "production";
+
+app.listen(port, (err) => {
+  if (err) {
+    logger.error({ err }, "Error listening on port");
+    process.exit(1);
+  }
+
+  logger.info({ port }, "Server listening");
+
+  ensureDefaultAdmin().catch((err) => {
+    logger.error({ err }, "Fatal: ensureDefaultAdmin failed after server start");
+    if (isProduction) {
       process.exit(1);
     }
-
-    logger.info({ port }, "Server listening");
   });
 });
