@@ -74,11 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  useEffect(() => {
-    if (!session) {
-      setLocation("/");
-    }
-  }, [session, setLocation]);
+  // Auth check temporarily disabled — all pages accessible without login
 
   useEffect(() => {
     if (!session) return;
