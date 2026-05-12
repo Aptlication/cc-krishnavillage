@@ -8,8 +8,6 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT ?? 23744);
 const distDir = resolve(__dirname, "dist/public");
 
-// API_URL takes precedence (full https URL for Railway).
-// Falls back to localhost:API_PORT for local dev.
 const API_URL = process.env.API_URL
   ? process.env.API_URL.replace(/\/$/, "")
   : null;
@@ -29,6 +27,65 @@ const MIME = {
   ".woff2": "font/woff2",
 };
 
+// ---------------------------------------------------------------------------
+// Bypass token — acquired from the local api-server on startup so the admin
+// dashboard never shows a login wall. The token is injected into every
+// proxied /api request, replacing any frontend-supplied Authorization header.
+// ---------------------------------------------------------------------------
+let bypassToken = null;
+
+async function fetchBypassToken() {
+  const bypassSecret = process.env.ADMIN_BYPASS_SECRET;
+  const initPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  const password = bypassSecret || initPassword;
+  if (!password) return false;
+
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ username: "admin", password });
+    const req = httpRequest(
+      { hostname: apiHost, port: apiPort, path: "/api/staff/login", method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode === 200) {
+            try {
+              const json = JSON.parse(data);
+              if (json.token) {
+                bypassToken = json.token;
+                console.log("Admin bypass token acquired");
+                resolve(true);
+                return;
+              }
+            } catch {}
+          }
+          resolve(false);
+        });
+      }
+    );
+    req.on("error", () => resolve(false));
+    req.write(body);
+    req.end();
+  });
+}
+
+async function initBypassToken() {
+  let attempt = 0;
+  while (!bypassToken) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+    attempt++;
+    await fetchBypassToken();
+  }
+}
+initBypassToken();
+
+// Refresh before the 8-hour JWT expiry
+setInterval(fetchBypassToken, 7 * 60 * 60 * 1000);
+
+// ---------------------------------------------------------------------------
+// API proxy
+// ---------------------------------------------------------------------------
 function proxyApi(effectiveUrl, req, res) {
   const onProxyRes = (proxyRes) => {
     res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
@@ -40,31 +97,25 @@ function proxyApi(effectiveUrl, req, res) {
     res.end(JSON.stringify({ error: "API proxy error" }));
   };
 
+  // Inject the bypass token so the frontend never needs to authenticate
+  const headers = { ...req.headers };
+  if (bypassToken) headers["authorization"] = `Bearer ${bypassToken}`;
+
   if (API_URL) {
     const target = new URL(effectiveUrl, API_URL);
     const isHttps = target.protocol === "https:";
     const requester = isHttps ? httpsRequest : httpRequest;
     const proxyReq = requester(
-      {
-        hostname: target.hostname,
-        port: target.port || (isHttps ? 443 : 80),
-        path: target.pathname + target.search,
-        method: req.method,
-        headers: { ...req.headers, host: target.hostname },
-      },
+      { hostname: target.hostname, port: target.port || (isHttps ? 443 : 80),
+        path: target.pathname + target.search, method: req.method,
+        headers: { ...headers, host: target.hostname } },
       onProxyRes,
     );
     proxyReq.on("error", onError);
     req.pipe(proxyReq);
   } else {
     const proxyReq = httpRequest(
-      {
-        hostname: apiHost,
-        port: apiPort,
-        path: effectiveUrl,
-        method: req.method,
-        headers: req.headers,
-      },
+      { hostname: apiHost, port: apiPort, path: effectiveUrl, method: req.method, headers },
       onProxyRes,
     );
     proxyReq.on("error", onError);
@@ -72,6 +123,9 @@ function proxyApi(effectiveUrl, req, res) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Static file server
+// ---------------------------------------------------------------------------
 const server = createServer((req, res) => {
   const url = new URL(req.url, `http://localhost`);
   const pathname = url.pathname;
