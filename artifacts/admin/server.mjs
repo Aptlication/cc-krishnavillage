@@ -28,91 +28,60 @@ const MIME = {
 };
 
 // ---------------------------------------------------------------------------
-// Bypass token — acquired from the local api-server on startup so the admin
+// Bypass token — acquired from the api-server on startup so the admin
 // dashboard never shows a login wall. The token is injected into every
-// proxied /api request, replacing any frontend-supplied Authorization header.
+// proxied /api request.
 // ---------------------------------------------------------------------------
 let bypassToken = null;
 
 async function fetchBypassToken() {
-  const bypassSecret = process.env.ADMIN_BYPASS_SECRET;
-  const initPassword = process.env.INITIAL_ADMIN_PASSWORD;
-  const password = bypassSecret || initPassword;
+  const password = process.env.ADMIN_BYPASS_SECRET || process.env.INITIAL_ADMIN_PASSWORD;
   if (!password) {
-    console.warn("Admin bypass: neither ADMIN_BYPASS_SECRET nor INITIAL_ADMIN_PASSWORD is set — cannot auto-login");
+    console.warn("Admin bypass: ADMIN_BYPASS_SECRET not set — skipping");
     return false;
   }
 
-  const body = JSON.stringify({ username: "admin", password });
+  const base = API_URL || `http://${apiHost}:${apiPort}`;
+  const loginUrl = `${base}/api/staff/login`;
 
-  // If API_URL is set (separate Railway service), call it via HTTPS.
-  // Otherwise fall back to localhost (same-container / local dev).
-  if (API_URL) {
-    return new Promise((resolve) => {
-      const target = new URL("/api/staff/login", API_URL);
-      const isHttps = target.protocol === "https:";
-      const requester = isHttps ? httpsRequest : httpRequest;
-      const req = requester(
-        { hostname: target.hostname, port: target.port || (isHttps ? 443 : 80),
-          path: "/api/staff/login", method: "POST",
-          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
-        (res) => {
-          let data = "";
-          res.on("data", (c) => (data += c));
-          res.on("end", () => {
-            if (res.statusCode === 200) {
-              try {
-                const json = JSON.parse(data);
-                if (json.token) { bypassToken = json.token; console.log("Admin bypass token acquired"); resolve(true); return; }
-              } catch {}
-            }
-            resolve(false);
-          });
-        }
-      );
-      req.on("error", () => resolve(false));
-      req.write(body);
-      req.end();
+  try {
+    const res = await fetch(loginUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "admin", password }),
     });
-  }
-
-  // Local / same-container: call via localhost
-  return new Promise((resolve) => {
-    const req = httpRequest(
-      { hostname: apiHost, port: apiPort, path: "/api/staff/login", method: "POST",
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => {
-          if (res.statusCode === 200) {
-            try {
-              const json = JSON.parse(data);
-              if (json.token) { bypassToken = json.token; console.log("Admin bypass token acquired"); resolve(true); return; }
-            } catch {}
-          }
-          resolve(false);
-        });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.token) {
+        bypassToken = json.token;
+        console.log("Admin bypass token acquired from", loginUrl);
+        return true;
       }
-    );
-    req.on("error", () => resolve(false));
-    req.write(body);
-    req.end();
-  });
+    } else {
+      console.warn("Bypass login failed:", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.warn("Bypass token fetch error:", err.message);
+  }
+  return false;
 }
 
 async function initBypassToken() {
-  let attempt = 0;
-  while (!bypassToken) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-    attempt++;
-    await fetchBypassToken();
+  const MAX_ATTEMPTS = 20;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) await new Promise((r) => setTimeout(r, 3000));
+    const ok = await fetchBypassToken();
+    if (ok) return;
+    console.log(`Bypass token attempt ${attempt}/${MAX_ATTEMPTS} failed — retrying…`);
   }
+  console.warn("Could not acquire bypass token after all attempts. Login wall will be shown.");
 }
-initBypassToken();
+
+// Fire-and-forget; never crash the process on failure
+initBypassToken().catch((err) => console.error("initBypassToken unexpected error:", err));
 
 // Refresh before the 8-hour JWT expiry
-setInterval(fetchBypassToken, 7 * 60 * 60 * 1000);
+setInterval(() => fetchBypassToken().catch(() => {}), 7 * 60 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // API proxy
@@ -128,17 +97,26 @@ function proxyApi(effectiveUrl, req, res) {
     res.end(JSON.stringify({ error: "API proxy error" }));
   };
 
-  // Inject the bypass token so the frontend never needs to authenticate
   const headers = { ...req.headers };
   if (bypassToken) headers["authorization"] = `Bearer ${bypassToken}`;
 
   if (API_URL) {
-    const target = new URL(effectiveUrl, API_URL);
+    let target;
+    try {
+      target = new URL(effectiveUrl, API_URL);
+    } catch (err) {
+      console.error("Proxy URL build error:", err.message, "API_URL:", API_URL, "effectiveUrl:", effectiveUrl);
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Bad API_URL configuration" }));
+      return;
+    }
     const isHttps = target.protocol === "https:";
     const requester = isHttps ? httpsRequest : httpRequest;
     const proxyReq = requester(
-      { hostname: target.hostname, port: target.port || (isHttps ? 443 : 80),
-        path: target.pathname + target.search, method: req.method,
+      { hostname: target.hostname,
+        port: target.port || (isHttps ? 443 : 80),
+        path: target.pathname + target.search,
+        method: req.method,
         headers: { ...headers, host: target.hostname } },
       onProxyRes,
     );
