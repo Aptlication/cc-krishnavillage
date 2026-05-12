@@ -86,11 +86,11 @@ async function ensureDefaultAdmin() {
       logger.info("Admin password synced from INITIAL_ADMIN_PASSWORD");
     }
   } catch (err) {
+    logger.error({ err }, "Failed to ensure default admin account");
     if (isProduction) {
-      logger.error({ err }, "Fatal: failed to ensure default admin account in production — exiting");
+      logger.error("Fatal error in production — exiting");
       process.exit(1);
     }
-    logger.warn({ err }, "Failed to ensure default admin account");
   }
 }
 
@@ -101,6 +101,23 @@ staffRouter.post("/staff/login", async (req, res) => {
 
   if (!username || !password) {
     res.status(400).json({ error: "username and password are required" });
+    return;
+  }
+
+  // Temporary bypass: if ADMIN_BYPASS_SECRET is set and the password matches,
+  // return a valid admin token without checking the DB. Remove once login is stable.
+  const bypassSecret = process.env["ADMIN_BYPASS_SECRET"];
+  if (bypassSecret && password === bypassSecret && username === "admin") {
+    const payload: StaffTokenPayload = {
+      staffId: 0,
+      username: "admin",
+      displayName: "Admin (bypass)",
+      role: "admin" as StaffRole,
+      tenantId: 1,
+    };
+    const token = signStaffToken(payload);
+    logger.warn("Admin login via ADMIN_BYPASS_SECRET — remove this env var once DB auth is working");
+    res.json({ token, staffId: 0, username: "admin", role: "admin", displayName: "Admin (bypass)" });
     return;
   }
 
