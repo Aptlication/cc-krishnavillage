@@ -8,6 +8,19 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT ?? 23744);
 const distDir = resolve(__dirname, "dist/public");
 
+// ---------------------------------------------------------------------------
+// Deployment mode
+//
+// STANDALONE=true  — served at a root domain (admin.krishnavillage.com.au).
+//                    Requests arrive as /  /api/...  /assets/...
+//                    The dist is built with BASE_PATH=/ (build:standalone).
+//
+// (default)        — embedded in the monorepo at /admin/ path prefix.
+//                    The metasidecar routes /admin/* → this process.
+//                    The dist is built with BASE_PATH=/admin/ (build).
+// ---------------------------------------------------------------------------
+const STANDALONE = process.env.STANDALONE === "true";
+
 // Defensively strip "KEY=value" format in case the env var was set incorrectly
 // e.g. value is "API_URL=https://..." instead of just "https://..."
 function parseEnvUrl(raw) {
@@ -35,14 +48,14 @@ const MIME = {
 // ---------------------------------------------------------------------------
 // Bypass token — acquired from the api-server on startup so the admin
 // dashboard never shows a login wall. The token is injected into every
-// proxied /api request.
+// proxied /api request automatically.
 // ---------------------------------------------------------------------------
 let bypassToken = null;
 
 async function fetchBypassToken() {
   const password = process.env.ADMIN_BYPASS_SECRET || process.env.INITIAL_ADMIN_PASSWORD;
   if (!password) {
-    console.warn("Admin bypass: ADMIN_BYPASS_SECRET not set — skipping");
+    console.warn("Admin bypass: ADMIN_BYPASS_SECRET not set — login wall will be active");
     return false;
   }
 
@@ -89,6 +102,34 @@ initBypassToken().catch((err) => console.error("initBypassToken unexpected error
 setInterval(() => fetchBypassToken().catch(() => {}), 7 * 60 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
+// Request path normalisation
+//
+// In STANDALONE mode every request arrives with its real path (/, /api/...).
+// In embedded (monorepo) mode the metasidecar keeps the /admin prefix intact,
+// so we strip it before processing.
+// ---------------------------------------------------------------------------
+function normalisePaths(req) {
+  const url = new URL(req.url, "http://localhost");
+  const pathname = url.pathname;
+
+  if (STANDALONE) {
+    // Paths are already correct — no prefix to strip.
+    return { effectivePath: pathname, effectiveUrl: req.url, filePath: pathname };
+  }
+
+  // Embedded mode: strip /admin prefix forwarded by the metasidecar.
+  const effectivePath = pathname.startsWith("/admin")
+    ? pathname.slice("/admin".length) || "/"
+    : pathname;
+  const effectiveUrl = req.url.replace(/^\/admin/, "") || "/";
+  const filePath = pathname.startsWith("/admin")
+    ? pathname.slice("/admin".length) || "/"
+    : pathname;
+
+  return { effectivePath, effectiveUrl, filePath };
+}
+
+// ---------------------------------------------------------------------------
 // API proxy
 // ---------------------------------------------------------------------------
 function proxyApi(effectiveUrl, req, res) {
@@ -118,11 +159,13 @@ function proxyApi(effectiveUrl, req, res) {
     const isHttps = target.protocol === "https:";
     const requester = isHttps ? httpsRequest : httpRequest;
     const proxyReq = requester(
-      { hostname: target.hostname,
+      {
+        hostname: target.hostname,
         port: target.port || (isHttps ? 443 : 80),
         path: target.pathname + target.search,
         method: req.method,
-        headers: { ...headers, host: target.hostname } },
+        headers: { ...headers, host: target.hostname },
+      },
       onProxyRes,
     );
     proxyReq.on("error", onError);
@@ -141,26 +184,15 @@ function proxyApi(effectiveUrl, req, res) {
 // Static file server
 // ---------------------------------------------------------------------------
 const server = createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost`);
-  const pathname = url.pathname;
-
-  const effectivePath = pathname.startsWith("/admin")
-    ? pathname.slice("/admin".length) || "/"
-    : pathname;
-  const effectiveUrl = req.url.replace(/^\/admin/, "") || "/";
+  const { effectivePath, effectiveUrl, filePath } = normalisePaths(req);
 
   if (effectivePath.startsWith("/api")) {
     proxyApi(effectiveUrl, req, res);
     return;
   }
 
-  let filePath = pathname;
-  if (filePath.startsWith("/admin")) {
-    filePath = filePath.slice("/admin".length) || "/";
-  }
-  if (filePath === "" || filePath === "/") filePath = "/index.html";
-
-  let fullPath = join(distDir, filePath);
+  const resolvedFilePath = filePath === "" || filePath === "/" ? "/index.html" : filePath;
+  let fullPath = join(distDir, resolvedFilePath);
   if (!existsSync(fullPath) || !extname(fullPath)) {
     fullPath = join(distDir, "index.html");
   }
@@ -182,7 +214,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(port, "::", () => {
-  console.log(`Admin dashboard serving on port ${port}`);
+  console.log(`Admin dashboard serving on port ${port} (${STANDALONE ? "standalone" : "embedded /admin"} mode)`);
   if (API_URL) console.log(`  API proxy → ${API_URL}`);
   else console.log(`  API proxy → http://${apiHost}:${apiPort}`);
 });
