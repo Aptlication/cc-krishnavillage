@@ -12,7 +12,13 @@ import Notifications from "@/pages/notifications";
 import Staff from "@/pages/staff";
 import ExpensesPage from "@/pages/expenses-page";
 import ServicesContent from "@/pages/services-content";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
+
+// Route all API calls through the admin server proxy (which injects the bypass
+// token). BASE_URL is "/admin/" in embedded mode and "/" in standalone mode.
+// Stripping the trailing slash gives "/admin" or "", and the api-client only
+// prepends a non-empty string, so standalone mode is unaffected.
+setBaseUrl(import.meta.env.BASE_URL.replace(/\/$/, "") || null);
 
 setAuthTokenGetter(() => {
   try {
