@@ -95,11 +95,7 @@ async function ensureDefaultAdmin() {
       logger.info("ensureDefaultAdmin: INITIAL_ADMIN_PASSWORD not set — skipping password sync (accounts already exist)");
     }
   } catch (err) {
-    logger.error({ err }, "Failed to ensure default admin account");
-    if (isProduction) {
-      logger.error("Fatal error in production — exiting");
-      process.exit(1);
-    }
+    logger.error({ err }, "Failed to ensure default admin account — server will continue running");
   }
 }
 

@@ -27,9 +27,6 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
 
   ensureDefaultAdmin().catch((err) => {
-    logger.error({ err }, "Fatal: ensureDefaultAdmin failed after server start");
-    if (isProduction) {
-      process.exit(1);
-    }
+    logger.error({ err }, "ensureDefaultAdmin failed — server will continue running");
   });
 });

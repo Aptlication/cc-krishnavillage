@@ -85650,11 +85650,7 @@ async function ensureDefaultAdmin() {
       logger.info("ensureDefaultAdmin: INITIAL_ADMIN_PASSWORD not set \u2014 skipping password sync (accounts already exist)");
     }
   } catch (err) {
-    logger.error({ err }, "Failed to ensure default admin account");
-    if (isProduction3) {
-      logger.error("Fatal error in production \u2014 exiting");
-      process.exit(1);
-    }
+    logger.error({ err }, "Failed to ensure default admin account \u2014 server will continue running");
   }
 }
 staffRouter.post("/staff/login", async (req, res) => {
@@ -87143,10 +87139,7 @@ app_default.listen(port, (err) => {
   }
   logger.info({ port }, "Server listening");
   ensureDefaultAdmin().catch((err2) => {
-    logger.error({ err: err2 }, "Fatal: ensureDefaultAdmin failed after server start");
-    if (isProduction2) {
-      process.exit(1);
-    }
+    logger.error({ err: err2 }, "ensureDefaultAdmin failed \u2014 server will continue running");
   });
 });
 /*! Bundled license information:
