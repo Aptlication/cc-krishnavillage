@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSendNotification, useGetNotifications, getGetNotificationsQueryKey, useGetGuests, getGetGuestsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
@@ -85,12 +85,16 @@ export default function Notifications() {
     };
   }, [session?.staffId]);
 
+  const shownHistoryErrorRef = useRef(false);
   useEffect(() => {
-    if (isHistoryError) {
-      toast({ title: "Session expired", description: "Please log in again.", variant: "destructive" });
-      logout();
+    if (isHistoryError && !shownHistoryErrorRef.current) {
+      shownHistoryErrorRef.current = true;
+      toast({ title: "Could not load notification history", description: "Check your connection or try refreshing.", variant: "destructive" });
     }
-  }, [isHistoryError, logout, toast]);
+    if (!isHistoryError) {
+      shownHistoryErrorRef.current = false;
+    }
+  }, [isHistoryError, toast]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();

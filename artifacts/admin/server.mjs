@@ -134,6 +134,11 @@ function normalisePaths(req) {
 // ---------------------------------------------------------------------------
 function proxyApi(effectiveUrl, req, res) {
   const onProxyRes = (proxyRes) => {
+    if (proxyRes.statusCode === 401) {
+      // Bypass token may have been invalidated (e.g. api-server restarted).
+      // Re-acquire in background so the next request succeeds.
+      fetchBypassToken().catch(() => {});
+    }
     res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
     proxyRes.pipe(res);
   };

@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<StaffSession | null>(
     initial.session ?? BYPASS_SESSION,
   );
-  const [sessionExpired] = useState<boolean>(false);
+  const [sessionExpired] = useState<boolean>(initial.expired);
   const queryClient = useQueryClient();
 
   const { pushEnabled, setPushEnabled } = useStaffPush(session !== null);

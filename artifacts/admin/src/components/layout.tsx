@@ -14,8 +14,13 @@ import {
 } from "@workspace/api-client-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { logout, session } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
   const { data: health } = useHealthCheck();
   const { data: guests } = useGetGuests(
     {},
@@ -197,7 +202,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span>System: {health?.status === "ok" ? "Online" : "Checking..."}</span>
           </div>
           <button
-            onClick={logout}
+            onClick={handleLogout}
             data-testid="button-logout"
             className="flex items-center gap-3 px-3 py-2.5 w-full rounded-md text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-left"
           >
