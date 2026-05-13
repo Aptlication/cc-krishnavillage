@@ -85609,6 +85609,10 @@ async function ensureDefaultAdmin() {
     const defaultTenantId = await ensureDefaultTenant();
     const existing = await db.select().from(staffAccountsTable).limit(1);
     const envPassword = process.env["INITIAL_ADMIN_PASSWORD"];
+    logger.info(
+      { accountsExist: existing.length > 0, initialAdminPasswordSet: Boolean(envPassword) },
+      "ensureDefaultAdmin: startup check"
+    );
     if (existing.length === 0) {
       if (!envPassword && isProduction3) {
         throw new Error(
@@ -85638,9 +85642,12 @@ async function ensureDefaultAdmin() {
         logger.info("Created default admin account: username=admin (password set from INITIAL_ADMIN_PASSWORD)");
       }
     } else if (envPassword) {
+      logger.info("ensureDefaultAdmin: syncing admin password from INITIAL_ADMIN_PASSWORD");
       const hash2 = await bcryptjs_default.hash(envPassword.trim(), 12);
-      await db.update(staffAccountsTable).set({ passwordHash: hash2 }).where(eq(staffAccountsTable.username, "admin"));
-      logger.info("Admin password synced from INITIAL_ADMIN_PASSWORD");
+      const updated = await db.update(staffAccountsTable).set({ passwordHash: hash2 }).where(eq(staffAccountsTable.username, "admin")).returning({ id: staffAccountsTable.id });
+      logger.info({ rowsUpdated: updated.length }, "Admin password synced from INITIAL_ADMIN_PASSWORD");
+    } else {
+      logger.info("ensureDefaultAdmin: INITIAL_ADMIN_PASSWORD not set \u2014 skipping password sync (accounts already exist)");
     }
   } catch (err) {
     logger.error({ err }, "Failed to ensure default admin account");
@@ -86054,6 +86061,31 @@ staffRouter.get("/staff/security-events", requireStaffAuth, requireAdminRole, as
   const tenantId = staff.tenantId;
   const events = await db.select().from(securityEventsTable).where(eq(securityEventsTable.tenantId, tenantId)).orderBy(desc(securityEventsTable.createdAt)).limit(50);
   res.json(events);
+});
+staffRouter.post("/admin/reset-password", async (req, res) => {
+  const bypassSecret = process.env["ADMIN_BYPASS_SECRET"];
+  if (!bypassSecret) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const providedSecret = req.headers["x-bypass-secret"];
+  if (!providedSecret || providedSecret !== bypassSecret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const { newPassword } = req.body;
+  if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length === 0) {
+    res.status(400).json({ error: "newPassword is required" });
+    return;
+  }
+  const hash2 = await bcryptjs_default.hash(newPassword.trim(), 12);
+  const updated = await db.update(staffAccountsTable).set({ passwordHash: hash2 }).where(eq(staffAccountsTable.username, "admin")).returning({ id: staffAccountsTable.id });
+  if (updated.length === 0) {
+    res.status(404).json({ error: "Admin account not found" });
+    return;
+  }
+  logger.info("Admin password reset via POST /api/admin/reset-password");
+  res.json({ success: true });
 });
 var staffRoute_default = staffRouter;
 
