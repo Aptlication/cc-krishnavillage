@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/use-auth";
 import { useGuestListWatcher } from "@/hooks/use-guest-list-watcher";
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
 import Guests from "@/pages/guests";
 import Maintenance from "@/pages/maintenance";
 import Notifications from "@/pages/notifications";
@@ -38,6 +37,7 @@ function Router() {
       <Route path="/staff" component={Staff} />
       <Route path="/expenses" component={ExpensesPage} />
       <Route path="/services" component={ServicesContent} />
+      <Route path="/login" component={Guests} />
       <Route component={NotFound} />
     </Switch>
   );

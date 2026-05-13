@@ -19,7 +19,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const handleLogout = () => {
     logout();
-    navigate("/login");
+    navigate("/guests");
   };
   const { data: health } = useHealthCheck();
   const { data: guests } = useGetGuests(
