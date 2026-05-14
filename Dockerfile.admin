@@ -19,8 +19,9 @@ COPY artifacts/admin/ ./artifacts/admin/
 # Install all workspace dependencies
 RUN pnpm install --frozen-lockfile
 
-# Build the admin static bundle
-RUN pnpm --filter @workspace/admin run build
+# Build the admin static bundle (standalone: BASE_PATH=/ so asset URLs are
+# root-relative — matches STANDALONE=true on the Railway admin service).
+RUN pnpm --filter @workspace/admin run build:standalone
 
 # Serve static files (proxies /api/* to API_URL)
 CMD node artifacts/admin/server.mjs
