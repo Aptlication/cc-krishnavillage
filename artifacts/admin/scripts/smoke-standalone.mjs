@@ -5,7 +5,7 @@
  *   1. GET /         → 200 with HTML containing root-relative asset paths
  *   2. GET /assets/  → 200 for a real JS/CSS asset
  *   3. GET /nonexistent → 200 (SPA fallback to index.html)
- *   4. Bypass token acquisition is attempted (logged)
+ *   4. /api proxy is wired (502, not 500, when API_URL is unreachable)
  *
  * Usage:
  *   node artifacts/admin/scripts/smoke-standalone.mjs
@@ -81,7 +81,8 @@ async function main() {
         ...process.env,
         PORT: String(PORT),
         STANDALONE: "true",
-        // No API_URL or ADMIN_BYPASS_SECRET — bypass will warn but not crash
+        // No API_URL — the /api proxy will return 502, which is acceptable
+        // for this smoke test (we only verify it routes, not that it succeeds).
         NODE_ENV: "test",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -127,12 +128,6 @@ async function main() {
     // 4. API proxy path (will fail to connect but should not 500 — it returns 502)
     const api = await get("/api/staff/login");
     assert("GET /api/* → does not 500 (proxied correctly)", api.status !== 500, `got ${api.status}`);
-
-    // 5. Bypass attempted — give the async initBypassToken a moment to log
-    await new Promise((r) => setTimeout(r, 500));
-    const fullLog = logs.join("");
-    const bypassAttempted = fullLog.includes("bypass") || fullLog.includes("Bypass") || fullLog.includes("ADMIN_BYPASS_SECRET");
-    assert("Bypass token acquisition was attempted on startup", bypassAttempted, "no bypass log line found");
 
     console.log(`\nResults: ${passed} passed, ${failed} failed\n`);
   } finally {

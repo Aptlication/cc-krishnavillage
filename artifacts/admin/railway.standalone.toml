@@ -8,8 +8,11 @@
 #   3. Add these environment variables in Railway → Variables:
 #        STANDALONE=true
 #        API_URL=https://api-server-production-3787.up.railway.app
-#        ADMIN_BYPASS_SECRET=<set this to your secret value in Railway — never commit the actual value>
 #        (PORT is set automatically by Railway)
+#
+#      Auth is performed by the browser against the API server — the admin
+#      service does not need any credentials env vars. (ADMIN_BYPASS_SECRET,
+#      if you use it, belongs on the API server, not here.)
 #   4. Add custom domain: admin.krishnavillage.com.au
 #   5. Copy the CNAME target Railway provides and add it in your DNS:
 #        admin  CNAME  <railway-provided-value>  (TTL 3600)
@@ -25,6 +28,5 @@ startCommand = "node artifacts/admin/server.mjs"
 
 [service.envVars]
 STANDALONE = "true"
-# Set these as Railway secret variables, not here:
+# Set this as a Railway variable, not here:
 # API_URL = "https://api-server-production-3787.up.railway.app"
-# ADMIN_BYPASS_SECRET = "<your-secret-value>"

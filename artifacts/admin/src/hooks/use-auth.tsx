@@ -23,17 +23,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Bypass session — used when no real session exists.
-// The admin server injects a real bearer token into every proxied API request,
-// so this placeholder is enough for the frontend to enable its queries.
-const BYPASS_SESSION: StaffSession = {
-  token: "bypass",
-  staffId: 0,
-  username: "admin",
-  role: "admin",
-  displayName: "Admin",
-};
-
 function loadSession(): { session: StaffSession | null; expired: boolean } {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -56,10 +45,8 @@ function loadSession(): { session: StaffSession | null; expired: boolean } {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initial = loadSession();
-  const [session, setSession] = useState<StaffSession | null>(
-    initial.session ?? BYPASS_SESSION,
-  );
-  const [sessionExpired] = useState<boolean>(initial.expired);
+  const [session, setSession] = useState<StaffSession | null>(initial.session);
+  const [sessionExpired, setSessionExpired] = useState<boolean>(initial.expired);
   const queryClient = useQueryClient();
 
   const { pushEnabled, setPushEnabled } = useStaffPush(session !== null);
@@ -67,20 +54,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = (newSession: StaffSession) => {
     const stored: StoredSession = { session: newSession, loginAt: Date.now() };
     localStorage.setItem(SESSION_KEY, JSON.stringify(stored));
+    setSessionExpired(false);
     setSession(newSession);
   };
 
   const logout = () => {
     localStorage.removeItem(SESSION_KEY);
     queryClient.clear();
-    // Restore bypass session so the dashboard stays open
-    setSession(BYPASS_SESSION);
+    setSessionExpired(false);
+    setSession(null);
   };
 
-  // Ignore 401s — the admin server handles auth transparently
+  // On a 401 from the API, the bearer token is no longer accepted. Clear the
+  // session so the route guard redirects to /login, and surface the "session
+  // expired" banner on the login page.
   useEffect(() => {
-    setUnauthorizedHandler(null);
-  }, []);
+    setUnauthorizedHandler(() => {
+      localStorage.removeItem(SESSION_KEY);
+      queryClient.clear();
+      setSessionExpired(true);
+      setSession(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider value={{ session, sessionExpired, login, logout, pushEnabled, setPushEnabled }}>

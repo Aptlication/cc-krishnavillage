@@ -2,6 +2,9 @@
 
 # compiled output
 dist
+# Exception: the admin dashboard's dist is pre-built and committed to git
+# (the Dockerfile does not build it — see artifacts/admin/railway.standalone.toml).
+!artifacts/admin/dist/
 tmp
 out-tsc
 *.tsbuildinfo

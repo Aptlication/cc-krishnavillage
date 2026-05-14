@@ -46,60 +46,13 @@ const MIME = {
 };
 
 // ---------------------------------------------------------------------------
-// Bypass token — acquired from the api-server on startup so the admin
-// dashboard never shows a login wall. The token is injected into every
-// proxied /api request automatically.
+// Auth is now handled entirely by the browser: it stores a JWT in
+// localStorage after login and the api-client attaches it as a Bearer token
+// on every request. This proxy passes that Authorization header through
+// untouched. (Previously this file fetched an admin token on startup and
+// overrode every Authorization header — removed when the login wall was
+// restored.)
 // ---------------------------------------------------------------------------
-let bypassToken = null;
-
-async function fetchBypassToken() {
-  const password = process.env.ADMIN_BYPASS_SECRET || process.env.INITIAL_ADMIN_PASSWORD;
-  if (!password) {
-    console.warn("Admin bypass: ADMIN_BYPASS_SECRET not set — login wall will be active");
-    return false;
-  }
-
-  const base = API_URL || `http://${apiHost}:${apiPort}`;
-  const loginUrl = `${base}/api/staff/login`;
-
-  try {
-    const res = await fetch(loginUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "admin", password }),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (json.token) {
-        bypassToken = json.token;
-        console.log("Admin bypass token acquired from", loginUrl);
-        return true;
-      }
-    } else {
-      console.warn("Bypass login failed:", res.status, await res.text().catch(() => ""));
-    }
-  } catch (err) {
-    console.warn("Bypass token fetch error:", err.message);
-  }
-  return false;
-}
-
-async function initBypassToken() {
-  const MAX_ATTEMPTS = 20;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (attempt > 1) await new Promise((r) => setTimeout(r, 3000));
-    const ok = await fetchBypassToken();
-    if (ok) return;
-    console.log(`Bypass token attempt ${attempt}/${MAX_ATTEMPTS} failed — retrying…`);
-  }
-  console.warn("Could not acquire bypass token after all attempts. Login wall will be shown.");
-}
-
-// Fire-and-forget; never crash the process on failure
-initBypassToken().catch((err) => console.error("initBypassToken unexpected error:", err));
-
-// Refresh before the 8-hour JWT expiry
-setInterval(() => fetchBypassToken().catch(() => {}), 7 * 60 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // Request path normalisation
@@ -134,11 +87,6 @@ function normalisePaths(req) {
 // ---------------------------------------------------------------------------
 function proxyApi(effectiveUrl, req, res) {
   const onProxyRes = (proxyRes) => {
-    if (proxyRes.statusCode === 401) {
-      // Bypass token may have been invalidated (e.g. api-server restarted).
-      // Re-acquire in background so the next request succeeds.
-      fetchBypassToken().catch(() => {});
-    }
     res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
     proxyRes.pipe(res);
   };
@@ -148,8 +96,9 @@ function proxyApi(effectiveUrl, req, res) {
     res.end(JSON.stringify({ error: "API proxy error" }));
   };
 
+  // Pass the browser's headers through verbatim — including any
+  // Authorization: Bearer <jwt> set by the api-client after login.
   const headers = { ...req.headers };
-  if (bypassToken) headers["authorization"] = `Bearer ${bypassToken}`;
 
   if (API_URL) {
     let target;
